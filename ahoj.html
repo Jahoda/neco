@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ahoj</title>
+    <title>Dobrý den – Had</title>
     <style>
         body {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
             min-height: 100vh;
             margin: 0;
@@ -16,11 +16,195 @@
             color: #333;
         }
         h1 {
-            font-size: 4rem;
+            font-size: 2.5rem;
+            margin: 20px 0 10px;
+        }
+        #score {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+        canvas {
+            border: 2px solid #333;
+            border-radius: 4px;
+            background-color: #1a1a2e;
+        }
+        #info {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #666;
         }
     </style>
 </head>
 <body>
     <h1>Dobrý den!</h1>
+    <div id="score">Skóre: 0</div>
+    <canvas id="game" width="400" height="400"></canvas>
+    <div id="info">Ovládání: šipky nebo WASD · Mezerník = pauza · Enter = restart</div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+
+        const GRID = 20;
+        const COLS = canvas.width / GRID;
+        const ROWS = canvas.height / GRID;
+        const TICK_MS = 120;
+
+        let snake, direction, nextDirection, food, score, running, paused, gameOver;
+
+        function init() {
+            snake = [{ x: Math.floor(COLS / 2), y: Math.floor(ROWS / 2) }];
+            direction = { x: 1, y: 0 };
+            nextDirection = { x: 1, y: 0 };
+            score = 0;
+            running = true;
+            paused = false;
+            gameOver = false;
+            placeFood();
+            updateScore();
+        }
+
+        function placeFood() {
+            do {
+                food = {
+                    x: Math.floor(Math.random() * COLS),
+                    y: Math.floor(Math.random() * ROWS)
+                };
+            } while (snake.some(s => s.x === food.x && s.y === food.y));
+        }
+
+        function updateScore() {
+            scoreEl.textContent = 'Skóre: ' + score;
+        }
+
+        function update() {
+            if (!running || paused || gameOver) return;
+
+            direction = { ...nextDirection };
+            const head = {
+                x: snake[0].x + direction.x,
+                y: snake[0].y + direction.y
+            };
+
+            // Wall collision
+            if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
+                endGame();
+                return;
+            }
+
+            // Self collision
+            if (snake.some(s => s.x === head.x && s.y === head.y)) {
+                endGame();
+                return;
+            }
+
+            snake.unshift(head);
+
+            if (head.x === food.x && head.y === food.y) {
+                score++;
+                updateScore();
+                placeFood();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function endGame() {
+            gameOver = true;
+            running = false;
+        }
+
+        function draw() {
+            // Background
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Food
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath();
+            ctx.arc(
+                food.x * GRID + GRID / 2,
+                food.y * GRID + GRID / 2,
+                GRID / 2 - 2, 0, Math.PI * 2
+            );
+            ctx.fill();
+
+            // Snake
+            snake.forEach((segment, i) => {
+                ctx.fillStyle = i === 0 ? '#2ecc71' : '#27ae60';
+                ctx.fillRect(
+                    segment.x * GRID + 1,
+                    segment.y * GRID + 1,
+                    GRID - 2,
+                    GRID - 2
+                );
+            });
+
+            // Pause overlay
+            if (paused) {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '36px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('PAUZA', canvas.width / 2, canvas.height / 2);
+            }
+
+            // Game over overlay
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '36px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Konec hry!', canvas.width / 2, canvas.height / 2 - 20);
+                ctx.font = '20px sans-serif';
+                ctx.fillText('Skóre: ' + score, canvas.width / 2, canvas.height / 2 + 15);
+                ctx.fillText('Enter = nová hra', canvas.width / 2, canvas.height / 2 + 45);
+            }
+        }
+
+        document.addEventListener('keydown', e => {
+            const key = e.key;
+
+            // Restart
+            if (key === 'Enter' && gameOver) {
+                init();
+                return;
+            }
+
+            // Pause
+            if (key === ' ') {
+                e.preventDefault();
+                if (!gameOver) paused = !paused;
+                return;
+            }
+
+            // Direction
+            const dirs = {
+                ArrowUp:    { x: 0, y: -1 }, w: { x: 0, y: -1 },
+                ArrowDown:  { x: 0, y: 1 },  s: { x: 0, y: 1 },
+                ArrowLeft:  { x: -1, y: 0 }, a: { x: -1, y: 0 },
+                ArrowRight: { x: 1, y: 0 },  d: { x: 1, y: 0 }
+            };
+
+            if (dirs[key]) {
+                e.preventDefault();
+                const nd = dirs[key];
+                // Prevent reversing
+                if (nd.x !== -direction.x || nd.y !== -direction.y) {
+                    nextDirection = nd;
+                }
+            }
+        });
+
+        init();
+
+        setInterval(() => {
+            update();
+            draw();
+        }, TICK_MS);
+    </script>
 </body>
 </html>
